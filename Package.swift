@@ -13,6 +13,11 @@ let package = Package(
         .target(
             name: "SwiftAgent",
             path: "Sources/SwiftAgent"
+        ),
+        .testTarget(
+            name: "SwiftAgentTests",
+            dependencies: ["SwiftAgent"],
+            path: "Tests/SwiftAgentTests"
         )
     ]
 )

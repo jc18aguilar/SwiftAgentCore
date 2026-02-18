@@ -67,6 +67,7 @@ public final actor OpenAIResponsesProvider: LLMProvider {
 
         var request = URLRequest(url: Self.endpointURL)
         request.httpMethod = "POST"
+        request.timeoutInterval = 120
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
