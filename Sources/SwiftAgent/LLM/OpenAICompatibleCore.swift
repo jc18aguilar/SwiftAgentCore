@@ -247,7 +247,7 @@ enum OpenAICompatibleCore {
     private static func timeoutInterval(for baseURL: URL) -> TimeInterval {
         let host = (baseURL.host ?? "").lowercased()
         if host == "127.0.0.1" || host == "localhost" {
-            return 90
+            return 300
         }
         return 120
     }
