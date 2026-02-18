@@ -139,7 +139,9 @@ public final actor OpenAIResponsesProvider: LLMProvider {
         var blocks: [ContentBlock] = []
         if !textBuffer.isEmpty { blocks.append(.text(textBuffer)) }
         for call in completedToolCalls {
-            blocks.append(.toolUse(id: call.id, name: call.name, input: parseJSONObject(from: call.arguments)))
+            blocks.append(
+                .toolUse(id: call.id, name: call.name, input: parseJSONObject(from: call.arguments))
+            )
         }
 
         return LLMResponse(
@@ -182,6 +184,7 @@ public final actor OpenAIResponsesProvider: LLMProvider {
             "instructions": instructions,
             "input": input,
             "stream": true,
+            "store": false,
         ]
 
         if !tools.isEmpty {
