@@ -104,24 +104,70 @@ public struct OpenAICodexOAuth: OAuthProvider {
         }
 
         let expiresIn = token.expiresIn ?? 3600
+        let extra = Self.buildExtraClaims(idToken: token.idToken, accessToken: accessToken)
         return OAuthCredentials(
             accessToken: accessToken,
             refreshToken: refreshToken,
             expiresAt: Date().addingTimeInterval(TimeInterval(max(expiresIn - 30, 30))),
-            extra: nil
+            extra: extra.isEmpty ? nil : extra
         )
     }
 
     private struct TokenResponse: Decodable {
+        let idToken: String?
         let accessToken: String?
         let refreshToken: String?
         let expiresIn: Int?
 
         enum CodingKeys: String, CodingKey {
+            case idToken = "id_token"
             case accessToken = "access_token"
             case refreshToken = "refresh_token"
             case expiresIn = "expires_in"
         }
+    }
+
+    private static func buildExtraClaims(idToken: String?, accessToken: String) -> [String: String] {
+        var result: [String: String] = [:]
+
+        if let idToken, let claims = authClaims(fromJWT: idToken),
+            let accountID = claims["chatgpt_account_id"] as? String, !accountID.isEmpty
+        {
+            result["chatgpt_account_id"] = accountID
+        }
+
+        if let claims = authClaims(fromJWT: accessToken),
+            let planType = claims["chatgpt_plan_type"] as? String, !planType.isEmpty
+        {
+            result["chatgpt_plan_type"] = planType
+        }
+
+        return result
+    }
+
+    private static func authClaims(fromJWT jwt: String) -> [String: Any]? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = payload.count % 4
+        if remainder > 0 {
+            payload += String(repeating: "=", count: 4 - remainder)
+        }
+
+        guard let data = Data(base64Encoded: payload),
+            let raw = try? JSONSerialization.jsonObject(with: data),
+            let object = raw as? [String: Any]
+        else {
+            return nil
+        }
+
+        if let nested = object["https://api.openai.com/auth"] as? [String: Any] {
+            return nested
+        }
+        return object
     }
 
     private static func randomURLSafeString(byteCount: Int) -> String {
