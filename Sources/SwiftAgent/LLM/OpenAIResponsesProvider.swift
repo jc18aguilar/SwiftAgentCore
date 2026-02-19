@@ -4,6 +4,7 @@ public enum OpenAIResponsesProviderError: LocalizedError {
     case invalidHTTPResponse
     case requestFailed(statusCode: Int, body: String)
     case streamFailed(message: String)
+    case invalidModelsResponse(body: String)
 
     public var errorDescription: String? {
         switch self {
@@ -13,6 +14,8 @@ public enum OpenAIResponsesProviderError: LocalizedError {
             return "Responses API request failed (\(statusCode)): \(body)"
         case .streamFailed(let message):
             return "Responses API stream error: \(message)"
+        case .invalidModelsResponse(let body):
+            return "Responses API returned an invalid models payload: \(body)"
         }
     }
 }
@@ -24,21 +27,33 @@ public final actor OpenAIResponsesProvider: LLMProvider {
     public nonisolated let displayName: String = "OpenAI Codex"
 
     private static let endpointURL = URL(string: "https://chatgpt.com/backend-api/codex/responses")!
+    private static let modelsEndpointURL = URL(string: "https://chatgpt.com/backend-api/codex/models")!
+    private static let fallbackModels: [LLMModelInfo] = [
+        LLMModelInfo(id: "codex-mini-latest", name: "Codex Mini (latest)"),
+        LLMModelInfo(id: "gpt-4o", name: "GPT-4o"),
+        LLMModelInfo(id: "gpt-4o-mini", name: "GPT-4o mini"),
+        LLMModelInfo(id: "o1", name: "o1"),
+        LLMModelInfo(id: "o3-mini", name: "o3-mini"),
+        LLMModelInfo(id: "o4-mini", name: "o4-mini"),
+    ]
 
     private var credentials: OAuthCredentials
     private let oauthProvider: OAuthProvider
     private let model: String
+    private let codexClientVersion: String?
     private let onCredentialsUpdated: ((OAuthCredentials) async -> Void)?
 
     public init(
         credentials: OAuthCredentials,
         oauthProvider: OAuthProvider,
         model: String,
+        codexClientVersion: String? = nil,
         onCredentialsUpdated: ((OAuthCredentials) async -> Void)? = nil
     ) {
         self.credentials = credentials
         self.oauthProvider = oauthProvider
         self.model = model
+        self.codexClientVersion = codexClientVersion
         self.onCredentialsUpdated = onCredentialsUpdated
     }
 
@@ -47,14 +62,67 @@ public final actor OpenAIResponsesProvider: LLMProvider {
     }
 
     public func availableModels() async throws -> [LLMModelInfo] {
-        [
-            LLMModelInfo(id: "codex-mini-latest", name: "Codex Mini (latest)"),
-            LLMModelInfo(id: "gpt-4o", name: "GPT-4o"),
-            LLMModelInfo(id: "gpt-4o-mini", name: "GPT-4o mini"),
-            LLMModelInfo(id: "o1", name: "o1"),
-            LLMModelInfo(id: "o3-mini", name: "o3-mini"),
-            LLMModelInfo(id: "o4-mini", name: "o4-mini"),
+        let token = try await resolvedAccessToken()
+
+        var components = URLComponents(
+            url: Self.modelsEndpointURL,
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "client_version", value: resolvedCodexClientVersion())
         ]
+
+        guard let url = components.url else {
+            return Self.fallbackModels
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 60
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let accountID = Self.openAICodexAccountID(from: credentials) {
+            request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw OpenAIResponsesProviderError.invalidHTTPResponse
+        }
+
+        guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw OpenAIResponsesProviderError.requestFailed(
+                statusCode: http.statusCode,
+                body: body
+            )
+        }
+
+        if let decoded = try? JSONDecoder().decode(CodexModelsResponse.self, from: data) {
+            let models = decoded.models
+                .filter { ($0.supportedInAPI ?? true) && Self.modelVisibilityAllowsListing($0.visibility) }
+                .sorted { ($0.priority ?? Int.max) < ($1.priority ?? Int.max) }
+                .compactMap { $0.slug?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map { LLMModelInfo(id: $0, name: $0) }
+            if !models.isEmpty {
+                return Self.dedupedModels(models)
+            }
+        }
+
+        if let decoded = try? JSONDecoder().decode(OpenAIModelsResponse.self, from: data) {
+            let models = decoded.data
+                .map(\.id)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .map { LLMModelInfo(id: $0, name: $0) }
+            if !models.isEmpty {
+                return Self.dedupedModels(models)
+            }
+        }
+
+        let body = String(data: data, encoding: .utf8) ?? ""
+        throw OpenAIResponsesProviderError.invalidModelsResponse(body: body)
     }
 
     public func sendMessage(
@@ -163,6 +231,26 @@ public final actor OpenAIResponsesProvider: LLMProvider {
         return credentials.accessToken
     }
 
+    private func resolvedCodexClientVersion() -> String {
+        if let codexClientVersion {
+            let trimmed = codexClientVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+
+        let envValue = ProcessInfo.processInfo.environment["MAI_CODEX_CLIENT_VERSION"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let envValue, !envValue.isEmpty { return envValue }
+
+        if let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+            as? String
+        {
+            let trimmed = appVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+
+        return "0.0.0"
+    }
+
     private func buildPayload(
         system: String,
         messages: [LLMMessage],
@@ -264,7 +352,85 @@ public final actor OpenAIResponsesProvider: LLMProvider {
         return object.mapValues(JSONValue.from(any:))
     }
 
+    private static func dedupedModels(_ values: [LLMModelInfo]) -> [LLMModelInfo] {
+        var deduped: [LLMModelInfo] = []
+        var seen = Set<String>()
+        for model in values where seen.insert(model.id).inserted {
+            deduped.append(model)
+        }
+        return deduped
+    }
+
+    private static func modelVisibilityAllowsListing(_ value: String?) -> Bool {
+        guard let value else { return true }
+        return value.lowercased() != "hidden"
+    }
+
+    private static func openAICodexAccountID(from credentials: OAuthCredentials) -> String? {
+        if let accountID = credentials.extra?["chatgpt_account_id"], !accountID.isEmpty {
+            return accountID
+        }
+        if let claims = authClaims(fromJWT: credentials.accessToken),
+            let accountID = claims["chatgpt_account_id"] as? String,
+            !accountID.isEmpty
+        {
+            return accountID
+        }
+        return nil
+    }
+
+    private static func authClaims(fromJWT jwt: String) -> [String: Any]? {
+        let parts = jwt.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let remainder = payload.count % 4
+        if remainder > 0 {
+            payload += String(repeating: "=", count: 4 - remainder)
+        }
+
+        guard let data = Data(base64Encoded: payload),
+            let rawObject = try? JSONSerialization.jsonObject(with: data),
+            let rawDict = rawObject as? [String: Any]
+        else {
+            return nil
+        }
+
+        if let nested = rawDict["https://api.openai.com/auth"] as? [String: Any] {
+            return nested
+        }
+        return rawDict
+    }
+
     // MARK: - SSE decode types
+
+    private struct CodexModelsResponse: Decodable {
+        let models: [CodexModel]
+    }
+
+    private struct CodexModel: Decodable {
+        let slug: String?
+        let supportedInAPI: Bool?
+        let visibility: String?
+        let priority: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case slug
+            case supportedInAPI = "supported_in_api"
+            case visibility
+            case priority
+        }
+    }
+
+    private struct OpenAIModelsResponse: Decodable {
+        let data: [OpenAIModel]
+    }
+
+    private struct OpenAIModel: Decodable {
+        let id: String
+    }
 
     private struct ResponsesStreamEvent: Decodable {
         let type: String
