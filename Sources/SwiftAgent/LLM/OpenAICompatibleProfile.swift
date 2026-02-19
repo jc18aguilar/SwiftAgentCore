@@ -40,8 +40,6 @@ public struct OpenAICompatibleProfile: Sendable, Equatable {
             return .openRouter
         case "openai-api":
             return .openAIAPI
-        case "minimax-api":
-            return .miniMax
         case "deepseek-api":
             return .deepSeek
         case "groq-api":
@@ -67,17 +65,6 @@ public struct OpenAICompatibleProfile: Sendable, Equatable {
     public static var openRouter: OpenAICompatibleProfile {
         OpenAICompatibleProfile(
             id: "openrouter-api",
-            unsupportedToolsBodyPatterns: [
-                "does not support tools",
-                "tool calls are not supported",
-                "tool_choice",
-            ]
-        )
-    }
-
-    public static var miniMax: OpenAICompatibleProfile {
-        OpenAICompatibleProfile(
-            id: "minimax-api",
             unsupportedToolsBodyPatterns: [
                 "does not support tools",
                 "tool calls are not supported",
