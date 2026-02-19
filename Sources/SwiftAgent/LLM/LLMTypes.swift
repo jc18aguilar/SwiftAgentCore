@@ -110,6 +110,7 @@ public enum JSONValue: Codable, Equatable, Sendable {
 public enum LLMProviderType: String, Codable, Sendable {
     case openAICompatible
     case claude
+    case gemini
 }
 
 public enum LLMMessageRole: String, Codable, Sendable {
