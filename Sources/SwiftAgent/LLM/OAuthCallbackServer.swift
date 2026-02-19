@@ -1,5 +1,8 @@
 import Foundation
+
+#if os(macOS)
 import Darwin
+#endif
 
 public enum OAuthCallbackServerError: LocalizedError {
     case invalidPort
@@ -7,6 +10,7 @@ public enum OAuthCallbackServerError: LocalizedError {
     case timeout
     case malformedRequest
     case listenerFailed(String)
+    case platformNotSupported
 
     public var errorDescription: String? {
         switch self {
@@ -20,10 +24,13 @@ public enum OAuthCallbackServerError: LocalizedError {
             return "Malformed OAuth callback request."
         case .listenerFailed(let detail):
             return "OAuth callback server failed to start: \(detail)"
+        case .platformNotSupported:
+            return "OAuth callback server is not supported on this platform."
         }
     }
 }
 
+#if os(macOS)
 public actor OAuthCallbackServer {
     private var listenFD: Int32 = -1
     private var acceptSource: DispatchSourceRead?
@@ -289,3 +296,18 @@ public actor OAuthCallbackServer {
         return "\(prefix): \(message)"
     }
 }
+#else
+public actor OAuthCallbackServer {
+    public init() {}
+
+    public func listen(port: Int) async throws {
+        throw OAuthCallbackServerError.platformNotSupported
+    }
+
+    public func waitForCode(timeoutSeconds: TimeInterval = 180) async throws -> String {
+        throw OAuthCallbackServerError.platformNotSupported
+    }
+
+    public func stop() {}
+}
+#endif
