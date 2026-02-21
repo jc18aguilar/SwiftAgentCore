@@ -1,5 +1,11 @@
 # SwiftAgentCore
 
+[![](https://img.shields.io/github/v/tag/herrkaefer/SwiftAgentCore?label=version)](https://github.com/herrkaefer/SwiftAgentCore/tags)
+[![CI](https://github.com/herrkaefer/SwiftAgentCore/actions/workflows/ci.yml/badge.svg)](https://github.com/herrkaefer/SwiftAgentCore/actions/workflows/ci.yml)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fherrkaefer%2FSwiftAgentCore%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fherrkaefer%2FSwiftAgentCore%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 SwiftAgentCore is a Swift agent runtime with a unified multi-provider LLM layer, built-in tool execution, and skill loading.
 
 ## Features
