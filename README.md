@@ -103,6 +103,24 @@ let stream = runAgentLoop(
 for await _ in stream {}
 ```
 
+## Examples
+
+### Minimal CLI demo (3-minute run)
+
+This package includes a deterministic CLI demo that runs without API keys and shows the full loop:
+
+- user message
+- tool call
+- confirmation
+- tool result
+- final assistant response
+
+Run:
+
+```bash
+swift run MinimalAgentDemo
+```
+
 ## Provider Examples
 
 ### OpenAI-compatible
@@ -169,10 +187,10 @@ It does **not** include persistent state storage, database session management, o
 
 The next minor release focuses on interview-ready onboarding and stronger runtime validation:
 
-- Add `Examples/` minimal runnable demo (CLI-first) that can be verified in ~3 minutes.
-- Add an Agent loop architecture diagram to this README (message/tool/confirmation flow).
-- Add core tests for `AgentLoop` and `SkillLoader` to balance existing provider-heavy coverage.
-- Add clearer memory/context guidance and APIs for session-level context management.
+- [x] Add `Examples/` minimal runnable demo (CLI-first) that can be verified in ~3 minutes.
+- [ ] Add an Agent loop architecture diagram to this README (message/tool/confirmation flow).
+- [x] Add core tests for `AgentLoop` and `SkillLoader` to balance existing provider-heavy coverage.
+- [ ] Add clearer memory/context guidance and APIs for session-level context management.
 
 ## Skills
 
