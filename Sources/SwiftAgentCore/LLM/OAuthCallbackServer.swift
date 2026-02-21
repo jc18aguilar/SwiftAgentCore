@@ -104,8 +104,8 @@ public actor OAuthCallbackServer {
         let newQueue = DispatchQueue(label: "dev.mai.swiftagent.oauth.callback")
         let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: newQueue)
 
-        source.setEventHandler { [weak self] in
-            Task { await self?.drainAcceptQueue() }
+        source.setEventHandler { [server = self] in
+            Task { await server.drainAcceptQueue() }
         }
         source.setCancelHandler {
             close(fd)
@@ -123,9 +123,9 @@ public actor OAuthCallbackServer {
         return try await withCheckedThrowingContinuation { continuation in
             self.codeContinuation = continuation
 
-            self.timeoutTask = Task { [weak self] in
+            self.timeoutTask = Task { [server = self] in
                 try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-                await self?.finish(with: .failure(OAuthCallbackServerError.timeout))
+                await server.finish(with: .failure(OAuthCallbackServerError.timeout))
             }
         }
     }
@@ -165,8 +165,8 @@ public actor OAuthCallbackServer {
                 break
             }
 
-            queue.async { [weak self] in
-                self?.handle(clientFD: clientFD)
+            queue.async { [server = self] in
+                server.handle(clientFD: clientFD)
             }
         }
     }
