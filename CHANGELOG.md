@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+- No changes yet.
+
+## [1.1.0] - 2026-02-21
+
 ### Added
 
 - Added `MinimalAgentDemo` executable target under `Examples/MinimalCLI` for a deterministic 3-minute CLI walkthrough.
