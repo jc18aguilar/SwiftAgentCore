@@ -33,7 +33,7 @@ Add SwiftAgentCore as a dependency in your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/<your-org>/SwiftAgentCore.git", from: "1.0.0")
+    .package(url: "https://github.com/herrkaefer/SwiftAgentCore.git", from: "1.0.0")
 ],
 targets: [
     .target(
@@ -164,6 +164,15 @@ SwiftAgentCore includes **runtime conversation state** inside the agent loop:
 - In-memory conversation history
 
 It does **not** include persistent state storage, database session management, or app-level global store/reducer patterns. Persisting and restoring sessions should be handled by the host app.
+
+## Roadmap (v1.1)
+
+The next minor release focuses on interview-ready onboarding and stronger runtime validation:
+
+- Add `Examples/` minimal runnable demo (CLI-first) that can be verified in ~3 minutes.
+- Add an Agent loop architecture diagram to this README (message/tool/confirmation flow).
+- Add core tests for `AgentLoop` and `SkillLoader` to balance existing provider-heavy coverage.
+- Add clearer memory/context guidance and APIs for session-level context management.
 
 ## Skills
 
