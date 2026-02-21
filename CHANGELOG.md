@@ -13,6 +13,7 @@ All notable changes to this project are documented in this file.
 ### Docs
 
 - Added README examples section with `swift run MinimalAgentDemo`.
+- Added README system structure diagram covering internal modules and external integrations.
 - Updated v1.1 roadmap checklist progress for examples/tests.
 
 ## [1.0.1] - 2026-02-21

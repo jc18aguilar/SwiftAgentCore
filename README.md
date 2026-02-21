@@ -121,6 +121,81 @@ Run:
 swift run MinimalAgentDemo
 ```
 
+## Agent Loop Architecture
+
+### System Structure (Modules + External Interactions)
+
+```mermaid
+flowchart TB
+    subgraph HostApp["Host App (CLI / iOS / macOS)"]
+        direction LR
+        UI["App UI / CLI Entry"]
+        Confirm["Confirmation Handler"]
+        AppTools["App-defined AgentTool(s)"]
+        SkillDir["Local skills directory (.md/.markdown)"]
+    end
+
+    subgraph SwiftAgentCore["SwiftAgentCore"]
+        direction TB
+
+        subgraph Core["Core"]
+            direction LR
+            Loop["runAgentLoop"]
+            Registry["ToolRegistry"]
+            Types["AgentLoopConfig / AgentEvent / LLMMessage"]
+        end
+
+        subgraph Skills["Skills"]
+            direction LR
+            Loader["SkillLoader"]
+            Defs["SkillDefinition"]
+        end
+
+        subgraph LLM["LLM Layer"]
+            direction LR
+            Proto["LLMProvider protocol"]
+            OAI["OpenAICompatibleProvider"]
+            Resp["OpenAIResponsesProvider"]
+            Gem["GeminiProvider"]
+            Mini["MiniMaxAnthropicProvider"]
+            Fallback["StructuredToolFallbackProvider"]
+            OAuth["OAuth helpers + callback server"]
+        end
+    end
+
+    subgraph External["External Systems"]
+        direction LR
+        OpenAI["OpenAI-compatible APIs"]
+        GeminiAPI["Google Gemini API"]
+        MiniMaxAPI["MiniMax Anthropic-compatible API"]
+        Browser["System Browser (OAuth)"]
+        Callback["Local OAuth Callback Endpoint"]
+    end
+
+    UI --> Loop
+    Confirm --> Loop
+    AppTools --> Registry
+    SkillDir --> Loader --> Defs
+
+    Loop --> Registry
+    Loop --> Types
+    Loop --> Proto
+    Proto --> OAI
+    Proto --> Resp
+    Proto --> Gem
+    Proto --> Mini
+    Proto --> Fallback
+    Resp --> OAuth
+
+    OAI --> OpenAI
+    Resp --> OpenAI
+    Gem --> GeminiAPI
+    Mini --> MiniMaxAPI
+    OAuth --> Browser
+    Browser --> Callback
+    Callback --> OAuth
+```
+
 ## Provider Examples
 
 ### OpenAI-compatible
@@ -188,7 +263,7 @@ It does **not** include persistent state storage, database session management, o
 The next minor release focuses on interview-ready onboarding and stronger runtime validation:
 
 - [x] Add `Examples/` minimal runnable demo (CLI-first) that can be verified in ~3 minutes.
-- [ ] Add an Agent loop architecture diagram to this README (message/tool/confirmation flow).
+- [x] Add an Agent loop architecture diagram to this README (message/tool/confirmation flow).
 - [x] Add core tests for `AgentLoop` and `SkillLoader` to balance existing provider-heavy coverage.
 - [ ] Add clearer memory/context guidance and APIs for session-level context management.
 
