@@ -1,5 +1,5 @@
 import XCTest
-@testable import SwiftAgent
+@testable import SwiftAgentCore
 
 final class StructuredToolFallbackProviderTests: XCTestCase {
     func testParsesToolCallAndInjectsStructuredProtocol() async throws {

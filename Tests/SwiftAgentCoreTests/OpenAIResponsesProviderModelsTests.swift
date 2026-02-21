@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import SwiftAgent
+@testable import SwiftAgentCore
 
 final class OpenAIResponsesProviderModelsTests: XCTestCase {
     override class func setUp() {

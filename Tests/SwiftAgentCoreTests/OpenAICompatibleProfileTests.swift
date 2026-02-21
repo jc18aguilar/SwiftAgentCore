@@ -1,5 +1,5 @@
 import XCTest
-@testable import SwiftAgent
+@testable import SwiftAgentCore
 
 final class OpenAICompatibleProfileTests: XCTestCase {
     func testProviderMappingForKnownProviders() {
