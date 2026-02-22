@@ -4,13 +4,14 @@
 [![CI](https://github.com/herrkaefer/SwiftAgentCore/actions/workflows/ci.yml/badge.svg)](https://github.com/herrkaefer/SwiftAgentCore/actions/workflows/ci.yml)
 [![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fherrkaefer%2FSwiftAgentCore%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
 [![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fherrkaefer%2FSwiftAgentCore%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
+[![](https://img.shields.io/badge/platforms-macOS%2013%2B%20%7C%20iOS%2016%2B-0A84FF)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 SwiftAgentCore is a Swift agent runtime with a unified multi-provider LLM layer, built-in tool execution, and skill loading.
 
 ## Features
 
-- Lightweight & Portable - Zero external dependencies, built on Foundation only. Supports macOS 13+ / iOS 16+.
+- Lightweight & Portable - Zero external package dependencies. Supports macOS 13+ / iOS 16+.
 - Multi-Provider - OpenAI-compatible (DeepSeek, Groq, Ollama, OpenRouter), Anthropic, Gemini - unified behind a single provider interface.
 - Runtime Only - Pure agent runtime with no built-in tools or provider presets. You define every tool and choose your provider - nothing opinionated, fully composable.
 - Streaming-First - Token-level SSE streaming across all providers, delivered via AsyncStream and callback.
