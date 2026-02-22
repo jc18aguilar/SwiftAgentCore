@@ -6,6 +6,28 @@ All notable changes to this project are documented in this file.
 
 - No changes yet.
 
+## [1.2.0] - 2026-02-22
+
+### Added
+
+- Added loop-level LLM retry controls to `AgentLoopConfig` (`maxRetries`, `retryDelay`) with automatic retry for retryable provider errors.
+- Added per-call and whole-loop timeout controls to `AgentLoopConfig` (`llmCallTimeout`, `totalTimeout`).
+- Added `AgentLoop` tests for retry behavior, non-retryable failures, and timeout handling.
+
+### Changed
+
+- Updated `runAgentLoop` to apply retry/timeout behavior around provider `sendMessage` calls while keeping tool execution retry policy unchanged.
+
+### Removed
+
+- Removed `Examples/MinimalCLI` executable target and related package/example references.
+
+### Docs
+
+- Updated README features section wording and formatting.
+- Added DeepWiki badge and explicit platform badge (`macOS 13+ | iOS 16+`).
+- Updated roadmap entries to include optional MCP client and context-window management items.
+
 ## [1.1.0] - 2026-02-21
 
 ### Added

@@ -33,7 +33,7 @@ Add SwiftAgentCore as a dependency in your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/herrkaefer/SwiftAgentCore.git", from: "1.1.0")
+    .package(url: "https://github.com/herrkaefer/SwiftAgentCore.git", from: "1.2.0")
 ],
 targets: [
     .target(
