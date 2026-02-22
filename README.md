@@ -10,17 +10,15 @@ SwiftAgentCore is a Swift agent runtime with a unified multi-provider LLM layer,
 
 ## Features
 
-- Agent runtime with turn-based loop and event streaming (`runAgentLoop`)
-- Tool execution with typed schemas (`AgentTool`, `ToolDefinition`)
-- Skill loading from markdown front matter (`SkillLoader`, `SkillDefinition`)
-- In-memory conversation-state handling across turns
-- Unified provider protocol (`LLMProvider`) across:
-  - OpenAI-compatible APIs (`OpenAICompatibleProvider`)
-  - OpenAI Codex Responses API (`OpenAIResponsesProvider`)
-  - Google Gemini (`GeminiProvider`)
-  - MiniMax Anthropic-compatible API (`MiniMaxAnthropicProvider`)
-- Structured tool fallback wrapper for models without native tool calling (`StructuredToolFallbackProvider`)
-- OAuth building blocks for Codex and Claude flows (`OpenAICodexOAuth`, `AnthropicClaudeOAuth`, `OAuthCallbackServer`)
+- Lightweight & Portable - Zero external dependencies, built on Foundation only. Supports macOS 13+ / iOS 16+.
+- Multi-Provider - OpenAI-compatible (DeepSeek, Groq, Ollama, OpenRouter), Anthropic, Gemini - unified behind a single provider interface.
+- Runtime Only - Pure agent runtime with no built-in tools or provider presets. You define every tool and choose your provider - nothing opinionated, fully composable.
+- Streaming-First - Token-level SSE streaming across all providers, delivered via AsyncStream and callback.
+- Minimal Design - No class hierarchies, no macros, no result builders. Small API surface, easy to integrate.
+- Built-in OAuth - PKCE flows for Anthropic Claude and OpenAI Codex with automatic token refresh.
+- Tool Fallback - Transparent tool-calling emulation for models that don't support it natively.
+- Tool Confirmation - Safety-level gating on tools with user confirmation before execution.
+- Skill Loading - Load agent skills from markdown files with front-matter metadata.
 
 ## Requirements
 
