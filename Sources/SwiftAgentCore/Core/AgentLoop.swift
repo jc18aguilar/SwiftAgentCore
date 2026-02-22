@@ -1,5 +1,53 @@
 import Foundation
 
+private enum AgentLoopRuntimeError: LocalizedError {
+    case llmCallTimedOut(seconds: TimeInterval)
+    case totalTimeoutExceeded(seconds: TimeInterval)
+
+    var errorDescription: String? {
+        switch self {
+        case .llmCallTimedOut(let seconds):
+            return "LLM call timed out after \(String(format: "%.2f", seconds))s."
+        case .totalTimeoutExceeded(let seconds):
+            return "Agent loop timed out after \(String(format: "%.2f", seconds))s."
+        }
+    }
+}
+
+private enum TimeoutKind {
+    case llmCall
+    case total
+}
+
+private func nanoseconds(from seconds: TimeInterval) -> UInt64 {
+    guard seconds > 0 else { return 0 }
+    let value = seconds * 1_000_000_000
+    if value >= Double(UInt64.max) {
+        return UInt64.max
+    }
+    return UInt64(value.rounded())
+}
+
+private func retryDelayIfRetryable(error: Error, fallbackDelay: TimeInterval) -> TimeInterval? {
+    func decision(statusCode: Int, retryAfter: TimeInterval?) -> TimeInterval? {
+        guard statusCode == 429 || statusCode >= 500 else { return nil }
+        return max(0, retryAfter ?? fallbackDelay)
+    }
+
+    switch error {
+    case OpenAICompatibleProviderError.requestFailed(let statusCode, _, let retryAfter):
+        return decision(statusCode: statusCode, retryAfter: retryAfter)
+    case GeminiProviderError.requestFailed(let statusCode, _, let retryAfter):
+        return decision(statusCode: statusCode, retryAfter: retryAfter)
+    case MiniMaxAnthropicProviderError.requestFailed(let statusCode, _, let retryAfter):
+        return decision(statusCode: statusCode, retryAfter: retryAfter)
+    case OpenAIResponsesProviderError.requestFailed(let statusCode, _):
+        return decision(statusCode: statusCode, retryAfter: nil)
+    default:
+        return nil
+    }
+}
+
 public func runAgentLoop(
     config: AgentLoopConfig,
     initialMessages: [LLMMessage],
@@ -10,6 +58,138 @@ public func runAgentLoop(
             func emit(_ event: AgentEvent) {
                 onEvent(event)
                 continuation.yield(event)
+            }
+
+            let loopStartedAt = Date()
+
+            func remainingTotalTimeout() -> TimeInterval? {
+                guard let totalTimeout = config.totalTimeout else { return nil }
+                return totalTimeout - Date().timeIntervalSince(loopStartedAt)
+            }
+
+            func ensureTotalTimeoutNotExceeded() throws {
+                guard let totalTimeout = config.totalTimeout else { return }
+                let elapsed = Date().timeIntervalSince(loopStartedAt)
+                if elapsed >= totalTimeout {
+                    throw AgentLoopRuntimeError.totalTimeoutExceeded(seconds: totalTimeout)
+                }
+            }
+
+            func effectiveCallTimeout() throws -> (seconds: TimeInterval, kind: TimeoutKind)? {
+                let llmCallTimeout = config.llmCallTimeout
+                guard let remaining = remainingTotalTimeout() else {
+                    guard let llmCallTimeout else { return nil }
+                    if llmCallTimeout <= 0 {
+                        throw AgentLoopRuntimeError.llmCallTimedOut(seconds: llmCallTimeout)
+                    }
+                    return (llmCallTimeout, .llmCall)
+                }
+
+                guard let totalTimeout = config.totalTimeout else { return nil }
+                if remaining <= 0 {
+                    throw AgentLoopRuntimeError.totalTimeoutExceeded(seconds: totalTimeout)
+                }
+
+                guard let llmCallTimeout else {
+                    return (remaining, .total)
+                }
+
+                if llmCallTimeout <= 0 {
+                    throw AgentLoopRuntimeError.llmCallTimedOut(seconds: llmCallTimeout)
+                }
+
+                if llmCallTimeout <= remaining {
+                    return (llmCallTimeout, .llmCall)
+                }
+                return (remaining, .total)
+            }
+
+            func sendMessageWithTimeout(
+                system: String,
+                messages: [LLMMessage],
+                tools: [ToolDefinition],
+                onTextDelta: @escaping (String) -> Void
+            ) async throws -> LLMResponse {
+                guard let timeout = try effectiveCallTimeout() else {
+                    return try await config.provider.sendMessage(
+                        system: system,
+                        messages: messages,
+                        tools: tools,
+                        onTextDelta: onTextDelta
+                    )
+                }
+
+                return try await withThrowingTaskGroup(of: LLMResponse.self) { group in
+                    group.addTask {
+                        try await config.provider.sendMessage(
+                            system: system,
+                            messages: messages,
+                            tools: tools,
+                            onTextDelta: onTextDelta
+                        )
+                    }
+                    group.addTask {
+                        try await Task.sleep(nanoseconds: nanoseconds(from: timeout.seconds))
+                        switch timeout.kind {
+                        case .llmCall:
+                            throw AgentLoopRuntimeError.llmCallTimedOut(seconds: timeout.seconds)
+                        case .total:
+                            throw AgentLoopRuntimeError.totalTimeoutExceeded(
+                                seconds: config.totalTimeout ?? timeout.seconds
+                            )
+                        }
+                    }
+
+                    guard let result = try await group.next() else {
+                        throw AgentLoopRuntimeError.llmCallTimedOut(seconds: timeout.seconds)
+                    }
+                    group.cancelAll()
+                    return result
+                }
+            }
+
+            func sendMessageWithRetry(
+                system: String,
+                messages: [LLMMessage],
+                tools: [ToolDefinition],
+                onTextDelta: @escaping (String) -> Void
+            ) async throws -> LLMResponse {
+                var retriesRemaining = config.maxRetries
+
+                while true {
+                    try ensureTotalTimeoutNotExceeded()
+                    do {
+                        return try await sendMessageWithTimeout(
+                            system: system,
+                            messages: messages,
+                            tools: tools,
+                            onTextDelta: onTextDelta
+                        )
+                    } catch {
+                        guard !Task.isCancelled else { throw error }
+                        guard retriesRemaining > 0 else { throw error }
+                        guard
+                            let retryDelay = retryDelayIfRetryable(
+                                error: error,
+                                fallbackDelay: config.retryDelay
+                            )
+                        else {
+                            throw error
+                        }
+
+                        retriesRemaining -= 1
+                        guard retryDelay > 0 else { continue }
+
+                        if let remaining = remainingTotalTimeout() {
+                            let totalTimeout = config.totalTimeout ?? retryDelay
+                            if remaining <= 0 || remaining < retryDelay {
+                                throw AgentLoopRuntimeError.totalTimeoutExceeded(seconds: totalTimeout)
+                            }
+                        }
+
+                        try await Task.sleep(nanoseconds: nanoseconds(from: retryDelay))
+                    }
+                }
             }
 
             emit(.agentStart)
@@ -36,8 +216,9 @@ public func runAgentLoop(
                     emit(.messageStart(role: .assistant))
 
                     do {
+                        try ensureTotalTimeoutNotExceeded()
                         let systemPrompt = await config.buildSystemPrompt()
-                        let response = try await config.provider.sendMessage(
+                        let response = try await sendMessageWithRetry(
                             system: systemPrompt,
                             messages: conversation,
                             tools: registry.definitions,
@@ -66,6 +247,7 @@ public func runAgentLoop(
                         var results: [ContentBlock] = []
 
                         for toolCall in toolUses where !Task.isCancelled {
+                            try ensureTotalTimeoutNotExceeded()
                             guard let tool = registry.tool(named: toolCall.name) else {
                                 let text = "Tool '\(toolCall.name)' is not registered."
                                 emit(.toolExecutionEnd(name: toolCall.name, result: text, isError: true))

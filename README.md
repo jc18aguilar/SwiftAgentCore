@@ -248,6 +248,8 @@ The next minor release focuses on interview-ready onboarding and stronger runtim
 - [x] Add an Agent loop architecture diagram to this README (message/tool/confirmation flow).
 - [x] Add core tests for `AgentLoop` and `SkillLoader` to balance existing provider-heavy coverage.
 - [ ] Add clearer memory/context guidance and APIs for session-level context management.
+- [ ] Add an optional MCP (Model Context Protocol) client module for external tool servers.
+- [ ] Add context-window management strategies (trimming and summarization) for long conversations.
 
 ## Skills
 
