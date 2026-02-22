@@ -8,18 +8,12 @@ let package = Package(
         .iOS(.v16)
     ],
     products: [
-        .library(name: "SwiftAgentCore", targets: ["SwiftAgentCore"]),
-        .executable(name: "MinimalAgentDemo", targets: ["MinimalAgentDemo"])
+        .library(name: "SwiftAgentCore", targets: ["SwiftAgentCore"])
     ],
     targets: [
         .target(
             name: "SwiftAgentCore",
             path: "Sources/SwiftAgentCore"
-        ),
-        .executableTarget(
-            name: "MinimalAgentDemo",
-            dependencies: ["SwiftAgentCore"],
-            path: "Examples/MinimalCLI"
         ),
         .testTarget(
             name: "SwiftAgentCoreTests",
