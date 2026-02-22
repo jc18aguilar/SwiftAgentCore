@@ -3,6 +3,7 @@ import Foundation
 public struct AgentLoopConfig {
     public var provider: LLMProvider
     public var tools: [AgentTool]
+    public var skillRegistry: SkillRegistry?
     public var buildSystemPrompt: () async -> String
     public var confirmationHandler: (String, String) async -> Bool
     public var getSteeringMessages: () async -> [LLMMessage]
@@ -15,6 +16,7 @@ public struct AgentLoopConfig {
     public init(
         provider: LLMProvider,
         tools: [AgentTool],
+        skillRegistry: SkillRegistry? = nil,
         buildSystemPrompt: @escaping () async -> String,
         confirmationHandler: @escaping (String, String) async -> Bool,
         getSteeringMessages: @escaping () async -> [LLMMessage] = { [] },
@@ -26,6 +28,7 @@ public struct AgentLoopConfig {
     ) {
         self.provider = provider
         self.tools = tools
+        self.skillRegistry = skillRegistry
         self.buildSystemPrompt = buildSystemPrompt
         self.confirmationHandler = confirmationHandler
         self.getSteeringMessages = getSteeringMessages

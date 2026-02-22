@@ -144,6 +144,163 @@ final class SkillLoaderTests: XCTestCase {
 
         XCTAssertEqual(skills, [])
     }
+
+    func testSkillRegistryLoadAllMergesDirectoriesWithLaterOverride() throws {
+        try withTemporaryDirectory { firstDirectory in
+            try withTemporaryDirectory { secondDirectory in
+                try writeSkill(
+                    """
+                    ---
+                    name: shared
+                    description: first version
+                    ---
+                    from first
+                    """,
+                    named: "shared.md",
+                    in: firstDirectory
+                )
+                try writeSkill(
+                    """
+                    ---
+                    name: shared
+                    description: second version
+                    ---
+                    from second
+                    """,
+                    named: "shared.md",
+                    in: secondDirectory
+                )
+                try writeSkill(
+                    """
+                    ---
+                    name: local-only
+                    description: only here
+                    ---
+                    second only
+                    """,
+                    named: "local-only.md",
+                    in: secondDirectory
+                )
+
+                let registry = SkillRegistry(directories: [firstDirectory, secondDirectory])
+                let skills = try registry.loadAll()
+
+                XCTAssertEqual(skills.map(\.name), ["local-only", "shared"])
+                XCTAssertEqual(skills.first(where: { $0.name == "shared" })?.description, "second version")
+                XCTAssertEqual(skills.first(where: { $0.name == "shared" })?.systemPromptContent, "from second")
+            }
+        }
+    }
+
+    func testSkillRegistrySummaryExcludesHiddenByDefault() throws {
+        try withTemporaryDirectory { directory in
+            try writeSkill(
+                """
+                ---
+                name: visible
+                description: visible skill
+                ---
+                visible body
+                """,
+                named: "visible.md",
+                in: directory
+            )
+            try writeSkill(
+                """
+                ---
+                name: hidden
+                description: hidden skill
+                disable-model-invocation: true
+                ---
+                hidden body
+                """,
+                named: "hidden.md",
+                in: directory
+            )
+
+            let registry = SkillRegistry(directories: [directory])
+            let visibleSummary = registry.skillsSummary()
+            let fullSummary = registry.skillsSummary(excludeHidden: false)
+
+            XCTAssertEqual(visibleSummary, "- visible: visible skill")
+            XCTAssertTrue(fullSummary.contains("- hidden: hidden skill"))
+        }
+    }
+
+    func testSkillRegistrySummaryReturnsDefaultTextWhenNoSkillsVisible() throws {
+        try withTemporaryDirectory { directory in
+            try writeSkill(
+                """
+                ---
+                name: hidden
+                description: hidden skill
+                disable-model-invocation: true
+                ---
+                hidden body
+                """,
+                named: "hidden.md",
+                in: directory
+            )
+
+            let registry = SkillRegistry(directories: [directory])
+
+            XCTAssertEqual(registry.skillsSummary(), "No skills available.")
+        }
+    }
+
+    func testReadSkillToolReturnsFoundPayload() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("swiftagentcore-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try writeSkill(
+            """
+            ---
+            name: summarize
+            description: concise summary
+            disable-model-invocation: true
+            ---
+            summarize content
+            """,
+            named: "summarize.md",
+            in: directory
+        )
+
+        let registry = SkillRegistry(directories: [directory])
+        let tool = ReadSkillTool(registry: registry)
+
+        let output = try await tool.execute(input: ["name": .string("summarize")])
+        let payload = try XCTUnwrap(try parseJSONObject(output))
+
+        XCTAssertEqual(payload["name"] as? String, "summarize")
+        XCTAssertEqual(payload["description"] as? String, "concise summary")
+        XCTAssertEqual(payload["content"] as? String, "summarize content")
+        XCTAssertEqual(payload["disable_model_invocation"] as? Bool, true)
+        XCTAssertEqual(payload["found"] as? Bool, true)
+    }
+
+    func testReadSkillToolReturnsNotFoundPayload() async throws {
+        let registry = SkillRegistry(directories: [])
+        let tool = ReadSkillTool(registry: registry)
+
+        let output = try await tool.execute(input: ["name": .string("missing")])
+        let payload = try XCTUnwrap(try parseJSONObject(output))
+
+        XCTAssertEqual(payload["name"] as? String, "missing")
+        XCTAssertEqual(payload["found"] as? Bool, false)
+    }
+
+    func testReadSkillToolThrowsWhenMissingName() async {
+        let registry = SkillRegistry(directories: [])
+        let tool = ReadSkillTool(registry: registry)
+
+        do {
+            _ = try await tool.execute(input: [:])
+            XCTFail("Expected execute to throw when name is missing")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Missing required parameter: name")
+        }
+    }
 }
 
 private func withTemporaryDirectory(_ body: (URL) throws -> Void) throws {
@@ -156,4 +313,11 @@ private func withTemporaryDirectory(_ body: (URL) throws -> Void) throws {
 private func writeSkill(_ content: String, named fileName: String, in directory: URL) throws {
     let fileURL = directory.appendingPathComponent(fileName)
     try content.write(to: fileURL, atomically: true, encoding: .utf8)
+}
+
+private func parseJSONObject(_ text: String) throws -> [String: Any]? {
+    guard let data = text.data(using: .utf8) else {
+        return nil
+    }
+    return try JSONSerialization.jsonObject(with: data) as? [String: Any]
 }

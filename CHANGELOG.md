@@ -6,6 +6,24 @@ All notable changes to this project are documented in this file.
 
 - No changes yet.
 
+## [1.3.0] - 2026-02-22
+
+### Added
+
+- Added `SkillRegistry` for multi-directory skill loading with deterministic override behavior (later directories override earlier ones).
+- Added built-in `ReadSkillTool` (`read_skill`) so models can fetch full skill content by name at runtime.
+- Added `AgentLoop` auto-registration of `read_skill` when `AgentLoopConfig.skillRegistry` is provided.
+- Added tests for `SkillRegistry`, `ReadSkillTool`, and loop-level auto-injection of `read_skill`.
+
+### Changed
+
+- Extended `AgentLoopConfig` with optional `skillRegistry`.
+- Marked `SkillLoader` as `Sendable` for Swift concurrency correctness.
+
+### Docs
+
+- Updated README to describe the Skill system (`SkillRegistry` + built-in `ReadSkillTool`) and system prompt integration workflow.
+
 ## [1.2.0] - 2026-02-22
 
 ### Added

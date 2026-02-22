@@ -194,7 +194,13 @@ public func runAgentLoop(
 
             emit(.agentStart)
 
-            let registry = ToolRegistry(tools: config.tools)
+            var tools = config.tools
+            if let skillRegistry = config.skillRegistry,
+                !tools.contains(where: { $0.name == "read_skill" })
+            {
+                tools.append(ReadSkillTool(registry: skillRegistry))
+            }
+            let registry = ToolRegistry(tools: tools)
             var pendingMessages = initialMessages
             var conversation: [LLMMessage] = []
             var turnIndex = 0

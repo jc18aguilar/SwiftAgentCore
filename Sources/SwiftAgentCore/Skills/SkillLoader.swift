@@ -11,7 +11,7 @@ public enum SkillLoaderError: LocalizedError {
     }
 }
 
-public struct SkillLoader {
+public struct SkillLoader: Sendable {
     public init() {}
 
     public func loadSkills(from directory: URL) throws -> [SkillDefinition] {

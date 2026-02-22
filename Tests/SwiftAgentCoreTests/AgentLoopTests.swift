@@ -138,6 +138,64 @@ final class AgentLoopTests: XCTestCase {
         )
     }
 
+    func testAutoRegistersReadSkillToolWhenSkillRegistryConfigured() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("swiftagentcore-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let skillContent = """
+            ---
+            name: summarize
+            description: summarize content
+            ---
+            Summarize carefully.
+            """
+        try skillContent.write(
+            to: directory.appendingPathComponent("summarize.md"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let provider = SequenceProvider(
+            responses: [
+                LLMResponse(
+                    contentBlocks: [
+                        .toolUse(
+                            id: "call-1",
+                            name: "read_skill",
+                            input: ["name": .string("summarize")]
+                        )
+                    ],
+                    stopReason: .toolUse
+                ),
+                LLMResponse(contentBlocks: [.text("Done.")], stopReason: .endTurn),
+            ]
+        )
+
+        let registry = SkillRegistry(directories: [directory])
+        let stream = runAgentLoop(
+            config: AgentLoopConfig(
+                provider: provider,
+                tools: [],
+                skillRegistry: registry,
+                buildSystemPrompt: { "system" },
+                confirmationHandler: { _, _ in true }
+            ),
+            initialMessages: [.text(role: .user, "Load skill.")],
+            onEvent: { _ in }
+        )
+
+        _ = await collectEvents(from: stream)
+        let firstRequest = await provider.request(at: 0)
+        XCTAssertTrue(firstRequest.tools.contains(where: { $0.name == "read_skill" }))
+
+        let secondRequest = await provider.request(at: 1)
+        let result = firstToolResult(in: secondRequest.messages)
+        XCTAssertEqual(result?.isError, false)
+        XCTAssertTrue(result?.content.contains("\"found\" : true") ?? false)
+        XCTAssertTrue(result?.content.contains("\"name\" : \"summarize\"") ?? false)
+    }
+
     func testFollowUpMessagesStartSecondTurn() async {
         let provider = SequenceProvider(
             responses: [

@@ -20,7 +20,7 @@ SwiftAgentCore is a Swift agent runtime with a unified multi-provider LLM layer,
 - **Built-in OAuth** - PKCE flows for Anthropic Claude and OpenAI Codex with automatic token refresh.
 - **Tool Fallback** - Transparent tool-calling emulation for models that don't support it natively.
 - **Tool Confirmation** - Safety-level gating on tools with user confirmation before execution.
-- **Skill Loading** - Load agent skills from markdown files with front-matter metadata.
+- **Skill System** - Multi-directory `SkillRegistry` with a built-in `ReadSkillTool`; inject skill summaries into system prompts and let the LLM fetch full skill content on demand.
 
 ## Requirements
 
@@ -114,7 +114,7 @@ flowchart TB
         UI["App UI / CLI Entry"]
         Confirm["Confirmation Handler"]
         AppTools["App-defined AgentTool(s)"]
-        SkillDir["Local skills directory (.md/.markdown)"]
+        SkillDirs["Skill Directories (.md files)"]
     end
 
     subgraph SwiftAgentCore["SwiftAgentCore"]
@@ -129,8 +129,8 @@ flowchart TB
 
         subgraph Skills["Skills"]
             direction LR
-            Loader["SkillLoader"]
-            Defs["SkillDefinition"]
+            SReg["SkillRegistry"]
+            RST["ReadSkillTool (built-in)"]
         end
 
         subgraph LLM["LLM Layer"]
@@ -157,7 +157,10 @@ flowchart TB
     UI --> Loop
     Confirm --> Loop
     AppTools --> Registry
-    SkillDir --> Loader --> Defs
+    SkillDirs --> SReg
+    SReg --> Loop
+    Loop --> RST
+    RST --> SReg
 
     Loop --> Registry
     Loop --> Types
@@ -240,54 +243,66 @@ SwiftAgentCore includes **runtime conversation state** inside the agent loop:
 
 It does **not** include persistent state storage, database session management, or app-level global store/reducer patterns. Persisting and restoring sessions should be handled by the host app.
 
-## Roadmap (v1.1)
-
-The next minor release focuses on interview-ready onboarding and stronger runtime validation:
+## Roadmap
 
 - [ ] Add `Examples/` runnable demos (CLI and UI) with real LLM-triggered tool calling.
-- [x] Add an Agent loop architecture diagram to this README (message/tool/confirmation flow).
-- [x] Add core tests for `AgentLoop` and `SkillLoader` to balance existing provider-heavy coverage.
 - [ ] Add clearer memory/context guidance and APIs for session-level context management.
 - [ ] Add an optional MCP (Model Context Protocol) client module for external tool servers.
 - [ ] Add context-window management strategies (trimming and summarization) for long conversations.
 
 ## Skills
 
-`SkillLoader` can load markdown skill files with front matter into `SkillDefinition` values:
+Skills are markdown files with YAML front matter. See the [Agent Skills documentation](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) for the file format specification.
 
-- `name`
-- `description`
-- `disable-model-invocation`
-- prompt body content
+### SkillRegistry
 
-Example skill file (`skills/summarize.md`):
-
-```markdown
----
-name: summarize
-description: Summarize user text concisely
-disable-model-invocation: false
----
-When the user asks for a summary:
-- Return a concise bullet list.
-- Keep original meaning unchanged.
-```
-
-Load and apply a skill:
+`SkillRegistry` manages one or more skill directories. Skills in later directories override same-named skills in earlier ones, allowing app-level defaults to be overridden per-project.
 
 ```swift
-import Foundation
-import SwiftAgentCore
-
-let loader = SkillLoader()
-let skillsDir = URL(fileURLWithPath: "/path/to/skills")
-let selectedSkill = try loader.loadSkill(named: "summarize", from: skillsDir)
-
-let systemPrompt = """
-You are a helpful assistant.
-\(selectedSkill?.systemPromptContent ?? "")
-"""
+let registry = SkillRegistry(directories: [
+    appSkillsDirectory,   // bundled / global skills
+    vaultSkillsDirectory  // project-specific skills (override)
+])
 ```
+
+Key methods:
+
+```swift
+// List all skills (returns sorted, deduplicated)
+let skills = try registry.loadAll()
+
+// Look up a skill by name
+let skill = try registry.find(named: "summarize")
+
+// Generate a summary suitable for injection into a system prompt
+// excludeHidden: true omits skills with disable-model-invocation: true
+let summary = registry.skillsSummary()
+```
+
+### LLM Integration via AgentLoopConfig
+
+Pass the registry to `AgentLoopConfig`. The agent loop automatically injects a built-in `read_skill` tool so the LLM can fetch the full content of any skill on demand.
+
+```swift
+let registry = SkillRegistry(directories: [skillsDir])
+
+let config = AgentLoopConfig(
+    provider: provider,
+    tools: myTools,
+    skillRegistry: registry,          // auto-injects ReadSkillTool
+    buildSystemPrompt: {
+        """
+        You are a helpful assistant.
+
+        Available skills:
+        \(registry.skillsSummary())   // LLM sees skill names + descriptions
+        """
+    },
+    confirmationHandler: { _, _ in true }
+)
+```
+
+At runtime the LLM calls `read_skill` with a skill name to retrieve its full prompt content before acting on it. Skills with `disable-model-invocation: true` are excluded from `skillsSummary()` by default; they can still be activated programmatically via `registry.find(named:)`.
 
 ## Development
 
@@ -297,21 +312,3 @@ Run tests:
 swift test
 ```
 
-## Release Checklist (Swift Package Index)
-
-- Ensure the repository is public on GitHub.
-- Ensure the package URL ends with `.git`.
-- Create and push at least one semantic version tag (for example, `1.0.0`):
-
-```bash
-git tag 1.0.0
-git push origin 1.0.0
-```
-
-- Verify package metadata and build locally:
-
-```bash
-swift package dump-package
-swift build --target SwiftAgentCore
-swift test
-```
